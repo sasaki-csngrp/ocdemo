@@ -154,6 +154,20 @@ export default function OrderNewView() {
     [focusChain],
   );
 
+  const handleNew = useCallback(() => {
+    advanceRowOnStopRef.current = false;
+    gridApiRef.current?.stopEditing(true);
+    setContractParty(null);
+    setDeliveryParty(null);
+    setContractInput("");
+    setDeliveryInput("");
+    setDeliveryLocation("");
+    setDueDate("");
+    setForecastNumber("");
+    setRowData(createEmptyRows());
+    requestAnimationFrame(() => refContract.current?.focus());
+  }, []);
+
   const handleSave = useCallback(() => {
     const header = {
       contractPartyCode: contractParty?.code ?? "",
@@ -167,6 +181,7 @@ export default function OrderNewView() {
     );
     console.info("[保存モック]", { header, lines });
     alert("保存しました（コンソールにモック出力）");
+    handleNew();
   }, [
     contractParty,
     deliveryParty,
@@ -174,19 +189,10 @@ export default function OrderNewView() {
     dueDate,
     forecastNumber,
     rowData,
+    handleNew,
   ]);
 
-  const handleNew = useCallback(() => {
-    advanceRowOnStopRef.current = false;
-    gridApiRef.current?.stopEditing(true);
-    setContractParty(null);
-    setDeliveryParty(null);
-    setContractInput("");
-    setDeliveryInput("");
-    setDeliveryLocation("");
-    setDueDate("");
-    setForecastNumber("");
-    setRowData(createEmptyRows());
+  useEffect(() => {
     requestAnimationFrame(() => refContract.current?.focus());
   }, []);
 
