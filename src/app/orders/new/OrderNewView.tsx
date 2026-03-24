@@ -11,16 +11,17 @@ import {
   ModuleRegistry,
   AllCommunityModule,
   type CellEditingStoppedEvent,
-  type CellKeyDownEvent,
   type CellValueChangedEvent,
   type ColDef,
   type GridApi,
   type GridReadyEvent,
+  type SuppressKeyboardEventParams,
 } from "ag-grid-community";
 import { AgGridReact } from "ag-grid-react";
 import "ag-grid-community/styles/ag-grid.css";
 import "ag-grid-community/styles/ag-theme-balham.css";
 
+import { ProductCodeCellEditor } from "@/src/components/grid/ProductCodeCellEditor";
 import type { CodeMasterItem } from "@/src/constants/mockData";
 import { PARTIES, PRODUCTS } from "@/src/constants/mockData";
 import type { OrderLine } from "@/src/types/order";
@@ -43,6 +44,8 @@ function createEmptyRows(): OrderLineRow[] {
 }
 
 const EDIT_COLS = ["productCode", "quantity", "unitPrice"] as const;
+/** Enter で確定＋右へ進めるのは数量・単価のみ（製品列はセレクトの Enter と競合するため） */
+const ENTER_NAV_COL_KEYS = new Set<string>(["quantity", "unitPrice"]);
 
 function findPartyByInput(raw: string): CodeMasterItem | null {
   const q = raw.trim();
@@ -61,9 +64,44 @@ function findPartyByInput(raw: string): CodeMasterItem | null {
   return hits.length === 1 ? hits[0]! : null;
 }
 
+/** Enter 確定用: 上記に加え、プルダウンと同じ絞り込みで候補が 1 件ならその取引先 */
+function resolvePartyCommitFromInput(raw: string): CodeMasterItem | null {
+  const fromFind = findPartyByInput(raw);
+  if (fromFind) return fromFind;
+  const q = raw.trim().toLowerCase();
+  if (!q) return null;
+  const filtered = PARTIES.filter(
+    (o) =>
+      o.code.toLowerCase().includes(q) ||
+      o.name.toLowerCase().includes(q),
+  );
+  return filtered.length === 1 ? filtered[0]! : null;
+}
+
 function isAutocompleteListOpen(input: EventTarget | null): boolean {
   if (!(input instanceof HTMLInputElement)) return false;
   return input.getAttribute("aria-expanded") === "true";
+}
+
+/** JST の今日の暦日に add 日した日付を `YYYY-MM-DD` で返す（`input type="date"` 用） */
+function formatJstCalendarDatePlusDays(addDays: number): string {
+  const timeZone = "Asia/Tokyo";
+  const now = new Date();
+  const dtf = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    year: "numeric",
+    month: "numeric",
+    day: "numeric",
+  });
+  const parts = dtf.formatToParts(now);
+  const y = Number(parts.find((p) => p.type === "year")?.value);
+  const m = Number(parts.find((p) => p.type === "month")?.value);
+  const d = Number(parts.find((p) => p.type === "day")?.value);
+  const rolled = new Date(Date.UTC(y, m - 1, d + addDays));
+  const yy = rolled.getUTCFullYear();
+  const mm = rolled.getUTCMonth() + 1;
+  const dd = rolled.getUTCDate();
+  return `${yy}-${String(mm).padStart(2, "0")}-${String(dd).padStart(2, "0")}`;
 }
 
 export default function OrderNewView() {
@@ -184,6 +222,13 @@ export default function OrderNewView() {
           PRODUCTS.find((p) => p.code === raw) ??
           PRODUCTS.find((p) => p.code.toUpperCase() === upper);
         node.setDataValue("productName", hit?.name ?? "");
+        if (raw) {
+          const row = node.rowIndex ?? 0;
+          requestAnimationFrame(() => {
+            e.api.setFocusedCell(row, "quantity");
+            e.api.startEditingCell({ rowIndex: row, colKey: "quantity" });
+          });
+        }
       }
 
       if (colDef.field === "quantity" || colDef.field === "unitPrice") {
@@ -249,18 +294,22 @@ export default function OrderNewView() {
     [],
   );
 
-  const onCellKeyDown = useCallback((e: CellKeyDownEvent<OrderLineRow>) => {
-    const rowIdx = e.node.rowIndex ?? -1;
-    const colId = e.column.getColId();
-    const editing = e.api.getEditingCells().some(
-      (c) => c.rowIndex === rowIdx && c.colId === colId,
-    );
-    if (!editing) return;
-    const ke = e.event as KeyboardEvent;
-    if (ke.key === "Enter" && !ke.shiftKey && !ke.ctrlKey && !ke.altKey) {
+  const suppressEnterWhileEditing = useCallback(
+    (params: SuppressKeyboardEventParams<OrderLineRow, unknown>) => {
+      if (!params.editing) return false;
+      const ev = params.event;
+      if (ev.key !== "Enter" || ev.shiftKey || ev.ctrlKey || ev.altKey) {
+        return false;
+      }
+      const colId = params.column.getColId();
+      if (!ENTER_NAV_COL_KEYS.has(colId)) return false;
+      ev.preventDefault();
       advanceRowOnStopRef.current = true;
-    }
-  }, []);
+      params.api.stopEditing(false);
+      return true;
+    },
+    [],
+  );
 
   const columnDefs = useMemo<ColDef<OrderLineRow>[]>(
     () => [
@@ -274,9 +323,24 @@ export default function OrderNewView() {
       {
         headerName: "製品コード",
         field: "productCode",
-        width: 130,
+        width: 200,
+        minWidth: 160,
         editable: true,
         singleClickEdit: true,
+        cellEditor: ProductCodeCellEditor,
+        cellEditorPopup: true,
+        cellEditorPopupPosition: "under",
+        valueFormatter: (p) => {
+          const code = String(p.value ?? "").trim();
+          if (!code) return "";
+          const name = PRODUCTS.find((x) => x.code === code)?.name;
+          return name ? `${code} ${name}` : code;
+        },
+        valueParser: (p) => {
+          const s = String(p.newValue ?? "").trim();
+          if (!s) return "";
+          return s.toUpperCase();
+        },
       },
       {
         headerName: "製品名",
@@ -332,8 +396,9 @@ export default function OrderNewView() {
       filter: false,
       resizable: true,
       suppressHeaderMenuButton: true,
+      suppressKeyboardEvent: suppressEnterWhileEditing,
     }),
-    [],
+    [suppressEnterWhileEditing],
   );
 
   const partyOptionLabel = (o: CodeMasterItem) => `${o.code} ${o.name}`;
@@ -455,14 +520,17 @@ export default function OrderNewView() {
                         ) => {
                           params.inputProps?.onKeyDown?.(ev);
                           if (ev.key !== "Enter" || ev.shiftKey) return;
-                          if (isAutocompleteListOpen(ev.target)) return;
-                          ev.preventDefault();
                           const text = ev.currentTarget.value;
-                          const hit = findPartyByInput(text);
+                          const hit = resolvePartyCommitFromInput(text);
                           if (hit) {
+                            ev.preventDefault();
                             setContractParty(hit);
                             setContractInput(`${hit.code} ${hit.name}`);
+                            requestAnimationFrame(() => focusNextHeader(0));
+                            return;
                           }
+                          if (isAutocompleteListOpen(ev.target)) return;
+                          ev.preventDefault();
                           focusNextHeader(0);
                         },
                       },
@@ -523,14 +591,17 @@ export default function OrderNewView() {
                         ) => {
                           params.inputProps?.onKeyDown?.(ev);
                           if (ev.key !== "Enter" || ev.shiftKey) return;
-                          if (isAutocompleteListOpen(ev.target)) return;
-                          ev.preventDefault();
                           const text = ev.currentTarget.value;
-                          const hit = findPartyByInput(text);
+                          const hit = resolvePartyCommitFromInput(text);
                           if (hit) {
+                            ev.preventDefault();
                             setDeliveryParty(hit);
                             setDeliveryInput(`${hit.code} ${hit.name}`);
+                            requestAnimationFrame(() => focusNextHeader(1));
+                            return;
                           }
+                          if (isAutocompleteListOpen(ev.target)) return;
+                          ev.preventDefault();
                           focusNextHeader(1);
                         },
                       },
@@ -557,6 +628,11 @@ export default function OrderNewView() {
                 type="date"
                 value={dueDate}
                 onChange={(e) => setDueDate(e.target.value)}
+                onFocus={() => {
+                  setDueDate((prev) =>
+                    prev === "" ? formatJstCalendarDatePlusDays(7) : prev,
+                  );
+                }}
                 slotProps={{ inputLabel: { shrink: true } }}
                 inputRef={refDue}
                 onKeyDown={(ev) => {
@@ -606,7 +682,7 @@ export default function OrderNewView() {
                 color: "text.secondary",
               }}
             >
-              明細（Enter で右のセル → 行末で次行先頭）
+              明細（製品はコンボ入力＋リスト／確定で数量へ／数量・単価は Enter で右へ）
             </Typography>
             <div className="ag-theme-balham min-h-0 flex-1 p-1">
               <AgGridReact<OrderLineRow>
@@ -622,7 +698,6 @@ export default function OrderNewView() {
                 onGridReady={onGridReady}
                 onCellValueChanged={onCellValueChanged}
                 onCellEditingStopped={moveToNextCellAfterEdit}
-                onCellKeyDown={onCellKeyDown}
               />
             </div>
           </Paper>
