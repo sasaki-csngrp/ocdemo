@@ -105,6 +105,9 @@ export function ProductCodeCellEditor(
         const t = typeof v === "string" ? v : "";
         setInputValue(t);
         push(t);
+        // 候補リスト表示中に Enter した結果が「自由入力(string)」扱いの場合、
+        // ここで編集終了しないと 2 回目の Enter が必要になることがあるため停止する。
+        queueMicrotask(() => stopEditing(false));
       }}
       onInputChange={(_, v, reason) => {
         if (reason === "input") {
