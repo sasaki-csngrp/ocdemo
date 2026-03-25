@@ -308,6 +308,17 @@ export default function OrderNewView() {
         return false;
       }
       const colId = params.column.getColId();
+      // 製品コード: リスト展開中の Enter は MUI がハイライト確定に使う。先に AG Grid が処理すると未確定のまま編集終了する。
+      if (colId === "productCode") {
+        if (
+          isAutocompleteListOpen(ev.target) ||
+          isAutocompleteListOpen(
+            typeof document !== "undefined" ? document.activeElement : null,
+          )
+        ) {
+          return true;
+        }
+      }
       if (!ENTER_NAV_COL_KEYS.has(colId)) return false;
       ev.preventDefault();
       advanceRowOnStopRef.current = true;
@@ -335,7 +346,7 @@ export default function OrderNewView() {
         singleClickEdit: true,
         cellEditor: ProductCodeCellEditor,
         cellEditorPopup: true,
-        cellEditorPopupPosition: "under",
+        cellEditorPopupPosition: "over",
         valueFormatter: (p) => {
           const code = String(p.value ?? "").trim();
           if (!code) return "";
@@ -698,7 +709,6 @@ export default function OrderNewView() {
                 defaultColDef={defaultColDef}
                 getRowId={(p) => String(p.data.lineNo)}
                 singleClickEdit
-                stopEditingWhenCellsLoseFocus
                 enterNavigatesVertically={false}
                 enterNavigatesVerticallyAfterEdit={false}
                 onGridReady={onGridReady}
@@ -743,7 +753,7 @@ export default function OrderNewView() {
               "納期がタイトです。前工程のロットと突合してください。",
               "入力中の単価は過去 6 か月平均より約 8% 低いです。",
               "△△電池工業向けはリコール履歴があるロットを避ける運用が推奨です。",
-              "B-002（鉛蓄電池パック）は在庫閾値を下回る見込みです。",
+              "B002（鉛蓄電池パック）は在庫閾値を下回る見込みです。",
             ].map((text) => (
               <Paper
                 key={text}

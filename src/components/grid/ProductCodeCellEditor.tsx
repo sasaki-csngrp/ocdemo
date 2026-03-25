@@ -97,6 +97,8 @@ export function ProductCodeCellEditor(
           setSelected(v);
           setInputValue(`${v.code} ${v.name}`);
           push(v.code);
+          // キーボードで候補確定した直後も 1 回の Enter でコミットできるよう、次ティックで編集終了
+          queueMicrotask(() => stopEditing(false));
           return;
         }
         setSelected(null);
@@ -168,6 +170,8 @@ export function ProductCodeCellEditor(
           },
         },
         paper: {
+          // セルエディタがポップアップのとき、子のドロップダウンを「同一ポップアップ内」と認識させる
+          className: "ag-custom-component-popup",
           sx: {
             minWidth: editorMinWidth,
             maxWidth: "min(520px, calc(100vw - 24px))",

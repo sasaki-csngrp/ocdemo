@@ -20,14 +20,14 @@ export const PARTIES: readonly CodeMasterItem[] = [
 
 /** 製品マスタ */
 export const PRODUCTS: readonly CodeMasterItem[] = [
-  { code: "B-001", name: "リチウムセルL型" },
-  { code: "B-002", name: "鉛蓄電池パック" },
-  { code: "B-003", name: "電解液ユニット" },
-  { code: "B-004", name: "AGMバッテリー12V" },
-  { code: "B-005", name: "セパレータロール" },
-  { code: "B-006", name: "角形リチウムモジュール" },
-  { code: "B-007", name: "ジクロマット正極板" },
-  { code: "B-008", name: "コールドチェーン梱包材" },
-  { code: "B-009", name: "48Vマイルド用補機バッテリー" },
-  { code: "B-010", name: "リサイクル鉛インゴット" },
+  { code: "B001", name: "リチウムセルL型" },
+  { code: "B002", name: "鉛蓄電池パック" },
+  { code: "B003", name: "電解液ユニット" },
+  { code: "B004", name: "AGMバッテリー12V" },
+  { code: "B005", name: "セパレータロール" },
+  { code: "B006", name: "角形リチウムモジュール" },
+  { code: "B007", name: "ジクロマット正極板" },
+  { code: "B008", name: "コールドチェーン梱包材" },
+  { code: "B009", name: "48Vマイルド用補機バッテリー" },
+  { code: "B010", name: "リサイクル鉛インゴット" },
 ] as const;
